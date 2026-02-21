@@ -85,13 +85,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
     
     <script>
-        // Inisialisasi game dan papan
+        // Inisialisasi game
         var game = new Chess();
         var board = null;
         var $status = $('#status');
         var stockfish = null;
         var currentLevel = 10; // default Advanced 1600
-        var playerColor = 'w'; // putih selalu player
         var botTurn = false;
 
         // Inisialisasi Stockfish worker
@@ -185,14 +184,14 @@
             board.position(game.fen());
         }
 
-        // Konfigurasi papan
+        // Konfigurasi papan dengan gaya cburnett (standar, tidak pecah)
         var config = {
             draggable: true,
             position: 'start',
             onDragStart: onDragStart,
             onDrop: onDrop,
             onSnapEnd: onSnapEnd,
-            pieceTheme: 'https://lichess1.org/assets/piece/neo/{piece}.png'
+            pieceTheme: 'https://lichess1.org/assets/piece/cburnett/{piece}.png'
         };
         board = Chessboard('board', config);
 
