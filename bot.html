@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play Bot - Chess Clone</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2e2e2e;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #f0c45a;
+            margin-bottom: 10px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        select, button {
+            padding: 8px 16px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: none;
+            background-color: #3a3a3a;
+            color: #fff;
+            cursor: pointer;
+        }
+        select:hover, button:hover {
+            background-color: #4a4a4a;
+        }
+        #board {
+            width: 400px;
+            height: 400px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+        .status {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #f0c45a;
+        }
+        .footer {
+            margin-top: 20px;
+            color: #ccc;
+        }
+        a {
+            color: #f0c45a;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Play vs Bot</h1>
+    <div class="controls">
+        <label for="level">Pilih Level (Elo):</label>
+        <select id="level">
+            <option value="0">Beginner (800)</option>
+            <option value="5">Intermediate (1200)</option>
+            <option value="10" selected>Advanced (1600)</option>
+            <option value="15">Expert (2000)</option>
+            <option value="20">Master (2400)</option>
+        </select>
+        <button id="resetBtn">Reset Game</button>
+    </div>
+    <div id="board"></div>
+    <div class="status" id="status">Putih: Giliran Anda</div>
+    <div class="footer">
+        <a href="main.html">Kembali ke Menu</a>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+    
+    <script>
+        // Inisialisasi game dan papan
+        var game = new Chess();
+        var board = null;
+        var $status = $('#status');
+        var stockfish = null;
+        var currentLevel = 10; // default Advanced 1600
+        var playerColor = 'w'; // putih selalu player
+        var botTurn = false;
+
+        // Inisialisasi Stockfish worker
+        function initStockfish() {
+            if (stockfish) {
+                stockfish.terminate();
+            }
+            stockfish = new Worker('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');
+            stockfish.onmessage = function(event) {
+                var line = event.data;
+                console.log('Stockfish: ' + line);
+                if (line.startsWith('bestmove')) {
+                    var bestMove = line.split(' ')[1];
+                    if (bestMove && bestMove !== '(none)') {
+                        makeBotMove(bestMove);
+                    }
+                }
+            };
+            stockfish.postMessage('uci');
+            stockfish.postMessage('isready');
+            setStockfishLevel(currentLevel);
+        }
+
+        function setStockfishLevel(level) {
+            stockfish.postMessage('setoption name Skill Level value ' + level);
+        }
+
+        // Bot melakukan gerakan
+        function botMove() {
+            if (game.game_over() || botTurn === false) return;
+            var fen = game.fen();
+            stockfish.postMessage('position fen ' + fen);
+            stockfish.postMessage('go movetime 500'); // waktu 500ms
+        }
+
+        function makeBotMove(move) {
+            var moveObj = game.move({
+                from: move.substring(0,2),
+                to: move.substring(2,4),
+                promotion: move.substring(4,5) || 'q'
+            });
+            if (moveObj) {
+                board.position(game.fen());
+                updateStatus();
+                botTurn = false;
+            }
+        }
+
+        // Update status permainan
+        function updateStatus() {
+            var status = '';
+            if (game.in_checkmate()) {
+                status = 'Skakmat! ' + (game.turn() === 'w' ? 'Hitam' : 'Putih') + ' menang.';
+            } else if (game.in_draw()) {
+                status = 'Seri!';
+            } else {
+                status = (game.turn() === 'w' ? 'Putih' : 'Hitam') + ' giliran';
+                if (game.in_check()) {
+                    status += ' (Skak)';
+                }
+                status += botTurn ? ' - Bot berpikir...' : ' - Giliran Anda';
+            }
+            $status.html(status);
+        }
+
+        // Drag & drop player
+        function onDragStart(source, piece, position, orientation) {
+            if (game.game_over() || botTurn) return false;
+            if (piece.search(/^b/) !== -1) return false; // hanya putih
+        }
+
+        function onDrop(source, target) {
+            if (botTurn) return 'snapback';
+
+            var move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q'
+            });
+
+            if (move === null) return 'snapback';
+
+            board.position(game.fen());
+            updateStatus();
+            botTurn = true;
+            updateStatus();
+            setTimeout(() => { botMove(); }, 100);
+        }
+
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        // Konfigurasi papan
+        var config = {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd,
+            pieceTheme: 'https://lichess1.org/assets/piece/neo/{piece}.png'
+        };
+        board = Chessboard('board', config);
+
+        // Event listener
+        $('#level').on('change', function() {
+            currentLevel = parseInt($(this).val());
+            setStockfishLevel(currentLevel);
+            resetGame();
+        });
+
+        $('#resetBtn').on('click', resetGame);
+
+        function resetGame() {
+            game.reset();
+            board.position('start');
+            botTurn = false;
+            updateStatus();
+        }
+
+        initStockfish();
+        updateStatus();
+
+        $(window).resize(function() {
+            board.resize();
+        });
+    </script>
+</body>
+</html>
